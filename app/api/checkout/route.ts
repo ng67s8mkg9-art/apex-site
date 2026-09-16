@@ -34,6 +34,11 @@ type CheckoutItem = {
   quantity: number
 }
 
+type PurchasedItem = {
+  code: ProductCode
+  quantity: number
+}
+
 export async function POST(request: Request) {
   const secretKey = process.env.STRIPE_SECRET_KEY
 
@@ -69,6 +74,8 @@ export async function POST(request: Request) {
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] =
       []
 
+    const purchasedItems: PurchasedItem[] = []
+
     for (const item of items) {
       if (
         !item ||
@@ -101,6 +108,13 @@ export async function POST(request: Request) {
         )
       }
 
+      const code = item.code as ProductCode
+
+      purchasedItems.push({
+        code,
+        quantity: item.quantity,
+      })
+
       lineItems.push({
         quantity: item.quantity,
 
@@ -124,6 +138,12 @@ export async function POST(request: Request) {
         mode: 'payment',
 
         line_items: lineItems,
+
+        metadata: {
+          apex_items: JSON.stringify(
+            purchasedItems
+          ),
+        },
 
         success_url:
           `${origin}/checkout/success` +
