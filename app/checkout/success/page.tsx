@@ -1,6 +1,16 @@
 import Link from 'next/link'
 import Stripe from 'stripe'
 import ClearCart from './clear-cart'
+import { supabaseAdmin } from '../../lib/supabase-admin'
+
+const productFiles: Record<string, string> = {
+  'APX-P001': 'APX-P001-afterglow.zip',
+}
+
+type PurchasedItem = {
+  code: string
+  quantity: number
+}
 
 export default async function CheckoutSuccessPage({
   searchParams,
@@ -14,6 +24,7 @@ export default async function CheckoutSuccessPage({
     process.env.STRIPE_SECRET_KEY
 
   let paymentConfirmed = false
+  let downloadUrl: string | null = null
 
   if (session_id && secretKey) {
     try {
@@ -28,6 +39,54 @@ export default async function CheckoutSuccessPage({
 
       paymentConfirmed =
         session.payment_status === 'paid'
+
+      if (paymentConfirmed) {
+        const apexItems =
+          session.metadata?.apex_items
+
+        if (apexItems) {
+          try {
+            const purchasedItems =
+              JSON.parse(
+                apexItems
+              ) as PurchasedItem[]
+
+            const firstItem =
+              purchasedItems[0]
+
+            const filePath =
+              productFiles[firstItem?.code]
+
+            if (filePath) {
+              const { data, error } =
+                await supabaseAdmin.storage
+                  .from('apex-products')
+                  .createSignedUrl(
+                    filePath,
+                    60 * 60,
+                    {
+                      download: true,
+                    }
+                  )
+
+              if (!error) {
+                downloadUrl =
+                  data.signedUrl
+              } else {
+                console.error(
+                  'Unable to create signed download URL:',
+                  error
+                )
+              }
+            }
+          } catch (error) {
+            console.error(
+              'Unable to read checkout metadata:',
+              error
+            )
+          }
+        }
+      }
     } catch {
       paymentConfirmed = false
     }
@@ -88,25 +147,23 @@ export default async function CheckoutSuccessPage({
           <p>
             Your payment was
             successfully verified.
-            You&apos;ll receive the
-            order details at the email
-            address used during
-            checkout.
           </p>
 
           <div className="checkout-success-actions">
-            <Link
-              href="/"
-              className="button button-dark"
-            >
-              RETURN TO APEX
-            </Link>
+            {downloadUrl && (
+              <a
+                href={downloadUrl}
+                className="button button-dark"
+              >
+                DOWNLOAD PURCHASE
+              </a>
+            )}
 
             <Link
-              href="/#catalogue"
+              href="/"
               className="text-link"
             >
-              VIEW CATALOGUE
+              RETURN TO APEX
             </Link>
           </div>
         </section>
